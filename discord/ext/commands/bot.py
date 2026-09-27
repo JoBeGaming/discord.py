@@ -953,7 +953,7 @@ class BotBase(GroupMixin[None]):
                 if _is_submodule(name, module):
                     del sys.modules[module]
 
-    async def _load_from_module_spec(self, spec: importlib.machinery.ModuleSpec, key: str) -> None:
+    async def _load_from_module_spec(self, spec: importlib.machinery.ModuleSpec, key: str, default_setup: Callable[[BotT], None] | None = None) -> None:
         # precondition: key not in self.__extensions
         lib = importlib.util.module_from_spec(spec)
         sys.modules[key] = lib
@@ -964,7 +964,11 @@ class BotBase(GroupMixin[None]):
             raise errors.ExtensionFailed(key, e) from e
 
         try:
-            setup = getattr(lib, 'setup')
+            if default_setup is not None:
+                setup = getattr(lib, 'setup', default_setup)
+            else:
+                setup = getattr(lib, 'setup')
+
         except AttributeError:
             del sys.modules[key]
             raise errors.NoEntryPointError(key)
@@ -985,7 +989,7 @@ class BotBase(GroupMixin[None]):
         except ImportError:
             raise errors.ExtensionNotFound(name)
 
-    async def load_extension(self, name: str, *, package: Optional[str] = None) -> None:
+    async def load_extension(self, name: str, *, package: Optional[str] = None, default_setup: Callable[[BotT], None] | None = None) -> None:
         """|coro|
 
         Loads an extension.
@@ -1013,6 +1017,12 @@ class BotBase(GroupMixin[None]):
             Defaults to ``None``.
 
             .. versionadded:: 1.7
+        default_setup: Optional[Callable[[BotT], None]]
+            If no ```setup`` coroutine is found within the module, this will be
+            used instead, unless no function was given.
+            Defaults to ``None``.
+
+            .. versionadded:: 2.8.0
 
         Raises
         --------
@@ -1036,7 +1046,7 @@ class BotBase(GroupMixin[None]):
         if spec is None:
             raise errors.ExtensionNotFound(name)
 
-        await self._load_from_module_spec(spec, name)
+        await self._load_from_module_spec(spec, name, default_setup)
 
     async def unload_extension(self, name: str, *, package: Optional[str] = None) -> None:
         """|coro|
